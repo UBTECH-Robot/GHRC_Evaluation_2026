@@ -1,0 +1,122 @@
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE 与 AI 编码助手
+.idea/
+.vscode/
+.claude/
+.codex/
+.cursor/
+.aider*
+.windsurf/
+.continue/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# 工具缓存
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Hugging Face / 本地下载
+resources/
+weight/*
+!weight/.gitkeep
+!weight/README.md
+challenge2026_baseline/
+!challenge2026_baseline/.gitkeep
+!challenge2026_baseline/README.md
+challenge2026_dataset/
+!challenge2026_dataset/.gitkeep
+!challenge2026_dataset/README.md
+datasets/*
+!datasets/.gitkeep
+!datasets/README.md
+
+# 防止大文件落在仓库根目录时被误提交
+*.safetensors
+*.ckpt
+*.pth
+*.pt
+*.onnx
+*.h5
+*.hdf5
+
+# 训练与运行产物
+wandb/
+outputs/
+logs/
+checkpoints/
+train_example/*
+!train_example/EXAMPLE/
+tests/outputs/
+
+# 密钥与本地环境
+.env
+.env.*
+!.env.example
+
+# 其他
+*.log
+.cache/
+*.json
+.codex
+.github
+# 数据处理脚本
+augment_converted_dataset_quantiles.py
+compute_image_quantile_stats.py
+convert_merge_env_state.py
+process_converted_part_sorting_quantiles.py
+convert_split_env_state.py
+
+# 评测测试文件
+enter_infer.sh
+enter_sim.sh
+env.sh
+README_split_run.md
+run_infer_inside_container.sh
+run_sim_inside_container.sh
+eval_dataflow.md
+eval_overview.md
+eval_quickstart.md
+eval_quickstart.md
+eval_scoring.md
+eval_workflow.md
+eval_modules.md
+run_eval.md
+run.md
+tests/

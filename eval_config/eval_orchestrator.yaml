@@ -1,0 +1,22 @@
+# 评测编排器配置
+# 敏感凭据通过环境变量注入，不在此文件中配置:
+#   FEISHU_APP_ID / FEISHU_APP_SECRET  飞书应用凭据
+#   DOCKER_USERNAME / DOCKER_PASSWORD   Docker registry 凭据
+
+feishu:
+  bitable_app_token: "FzhKbAhG2a4QIHsaj1DceZQmnQc"   # 多维表格 App Token
+  table_id: "tblDNdHOHNQrwzt2"                         # 数据表 ID
+
+registry:
+  # 选手镜像所在的 registry
+  server: "sg-cosmos-acr-registry.ap-southeast-1.cr.aliyuncs.com"
+
+eval:
+  sim_image: "ghrc-eval-sim:latest"     # 平台统一 sim 镜像
+  tasks: ["task4", "task1", "task2", "task3"]
+  single_task_timeout: 7200              # 单任务评测超时（秒），默认 2 小时
+  results_dir: "logs/sim_eval_container" # 评测结果 JSON 输出目录
+
+schedule:
+  mode: "once"              # once: 执行一次后退出; daily: 持续循环
+  daily_time: "02:00"       # daily 模式下开始执行的时间 (HH:MM)

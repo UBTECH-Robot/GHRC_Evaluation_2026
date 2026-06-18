@@ -1,0 +1,67 @@
+root_path: "../../assets/resources/"
+
+scene_usd: 'Collected_Task4/SubUSDs/2_small_warehouse2.usd'
+
+timelimit: 100
+
+task_number: 3
+part:
+  # part_a_usd: "Task3_Part_A.usd"
+  part_a_usd: "Collected_28motor/28motor.usd"
+  # part_b_usd: "Collected_Part_B_ori_color/Part_B.usd"
+  part_b_usd: "Collected_Part_B_blue/Part_B.usd"
+  num_parts: 3
+  if_split_in_boxes: True
+  fixed_spawn:
+    enabled: true
+    anchor_fraction: 0.87
+    random_select: true
+    z_offset: 0.0
+    random_rotation: true
+    rotation_deg: [0, 0, 0]
+
+plane:
+  plane_position: 
+  - [0.28, 0.3, 1.044]
+  - [1.25, 0.3, 1.034]
+  plane_scale: 
+  - [0.12, 0.23, 0.1] 
+  - [0.12, 0.23, 0.1]
+
+table:
+  table_usd: 'Collected_table_v2/table_v2.usd'
+  table_position: 
+  - [0.75, 0.3, 0.5]
+  table_scale: 
+  - [1.9927, 1.8738, 1.1109]
+
+box:
+  box_usd: 'Box/box_60_40_23_cut_0.usd'
+  box_position: 
+  - [0.28, 0.3, 1.04]
+  - [1.25, 0.3, 1.04]
+  box_scale: 
+  - [0.5, 1.2, 0.3]
+  - [0.5, 1.2, 0.3]
+  lock_boxes: true   
+
+robot:
+  robot_usd: 'Collected_s2_v1_ecbg/s2_v1.usd' 
+  robot_position: [0.75, -0.25, 0.9] 
+  robot_rotation: [0, 0, 90]
+
+foam:
+  foam_usd: 'Collected_foam_collision/foam.usd' 
+  foam_position: [0.76, 0.3, 1.0]
+  lock_foam: true  
+
+grasp:
+  target_index: 0
+  lift_height: 0.17
+  settle_time: 2.0
+  approach_time: 3.0
+  reach_time: 2.0
+  hold_time: 1.0
+  lift_time: 2.0
+  tcp_offset: [0.0, 0.0, 0.22]   
+  ik_rot_weight: 0.1

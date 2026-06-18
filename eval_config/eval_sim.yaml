@@ -1,0 +1,48 @@
+# sim-eval 容器配置
+#
+# 依据:
+# - src/lerobot/scripts/ghrc_eval_sim.py
+# - src/lerobot/sim_eval/container_config.py
+# - src/lerobot/sim_eval/const.py
+#
+# 标记说明:
+# - [必填] 源码会校验或运行必须有值。
+# - [可选] 省略或设为 null 时使用源码默认值。
+# - [联动] 必须和 infer 侧配置保持一致。
+# - [通常不改] 本地调试可改，正式评测/分布式脚本中建议保持默认。
+#
+# 不允许修改:
+# - 不要为调参修改 src/lerobot/sim_eval 下的协议、断言、通信和评分源码。
+# - 任务评分/断言阈值不在本文件调节；如需本地调试，应修改对应
+#   Ubtech_sim/config/<Task>.yaml 的 evaluation 字段。
+
+# ---- 任务选择 ----
+task: task4                         # [必填] task1 / task2 / task3 / task4；会被 CLI --task 覆盖
+task_text: null                     # [可选] 任务自然语言描述；null 时使用内置 TASK_DEFAULT_TEXT
+task_config_path: null
+# max_steps: 2000                   # [可选] 单个 episode 最大步数；不写时 task1-3=10000, task4=2000
+
+# ---- 运行设备与 episode 控制 ----
+device: auto                        # [可选] auto / cpu / cuda / cuda:0；cuda 不可用时会回退 cpu
+num_episodes: 1
+auto_start: true                    # [可选] true=容器启动后自动开始评测；false=等待键盘 Enter
+enable_assertion: true              # [可选] true=启用任务成功/失败断言与评分；正式评测建议保持 true
+
+
+# ---- 输出与日志 ----
+log_dir: ../logs/sim_eval_container    # [必填] 结果输出目录；相对路径按 eval_config/ 解析
+print_every: 20                     # [可选] 每隔多少 step 打印一次状态/传输频率
+
+
+
+# ---- action / reset 控制 ----
+action_wait_timeout: 10.0           # [可选] 每个 step 等待 infer action 的超时时间，秒
+reset_retries: 3                    # [可选] episode 结束后本地 robot.reset() 重试次数
+
+# ---- WebSocket 客户端（连接 infer）----
+sim_infer_host: localhost
+sim_infer_control_port: 8765
+sim_infer_stream_port: 8766
+heartbeat_interval: 5.0
+connection_timeout: 30.0
+websocket_max_size_bytes: null

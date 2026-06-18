@@ -1,0 +1,55 @@
+# infer 容器配置
+#
+# 依据:
+# - src/lerobot/scripts/ghrc_eval_infer.py
+# - src/lerobot/sim_eval/container_config.py
+# - src/lerobot/sim_eval/const.py
+#
+# 标记说明:
+# - [必填] 源码会校验或运行必须有值。
+# - [条件必填] 只在特定 adapter 模式下必须有值。
+# - [可选] 省略或设为 null 时使用源码默认值。
+# - [联动] 必须和 sim 侧配置保持一致。
+# - [通常不改] 本地调试可改，正式评测/分布式脚本中建议保持默认。
+#
+# 不允许修改:
+# - 不要为调参修改 src/lerobot/sim_eval 下的协议、断言、通信和评分源码。
+# - 任务评分/断言阈值不在本文件调节；如需本地调试，应修改对应
+#   Ubtech_sim/config/<Task>.yaml 的 evaluation 字段。
+
+# ---- 任务选择 ----
+task: task4                         # [必填] task1 / task2 / task3 / task4；会被 CLI --task 覆盖
+task_text: null                     # [可选] 任务自然语言描述；null 时使用内置 TASK_DEFAULT_TEXT
+task_config_path: null              # [可选] 任务 YAML 路径；null 时按 task 使用内置默认路径
+                                    #  注意：非绝对路径会按本 YAML 所在目录 eval_config/ 解析
+                                    # [可选] 单个 episode 最大步数；不写时 task1-3=10000, task4=2000
+                                    #        不要写 null；源码会执行 int(max_steps)
+
+# ---- 设备 ----
+device: cuda:0                         # [可选] auto / cpu / cuda / cuda:0；cuda 不可用时会回退 cpu
+
+# ---- 策略适配器 ----
+adapter_type: lerobot               # [可选] 内置适配器类型；当前支持 lerobot
+adapter_class: null                 # [可选] 自定义适配器类路径；设置后优先于 adapter_type
+                                    #        格式: my_pkg.my_module:MyAdapterClass
+adapter_config: {}                  # [可选] 传入 adapter.load(..., config=adapter_config) 的自定义参数
+
+# ---- LeRobot 策略（adapter_class 为空且 adapter_type=lerobot 时生效）----
+policy_type: act                    # [条件必填] adapter_class 为空时必填；act / pi0 / diffusion
+policy_path: null                   # [可选] 单任务共用模型路径；通常保持 null，改用 task_policy_paths
+                                    #        注意：非绝对路径会按本 YAML 所在目录 eval_config/ 解析
+require_task_policy_paths: true     # [可选] true 表示不允许回退到源码内置默认 policy 路径
+task_policy_paths:                  # [条件必填] run_eval.sh all 跑四个任务时，在这里显式写每个任务的模型目录
+  task1: ../weight/weight/task1/act_001/checkpoints/160000/pretrained_model
+  task2: ../weight/weight/task2/act_001/checkpoints/050000/pretrained_model
+  task3: ../weight/weight/task3/act_001/checkpoints/100000/pretrained_model
+  task4: ../weight/weight/task4/act_001/checkpoints/100000/pretrained_model
+                                    # 请把上面四行改成你的真实权重目录；相对路径按 eval_config/ 解析
+
+# ---- WebSocket 服务（infer 监听端）----
+websocket_server_host: 0.0.0.0
+websocket_control_port: 8765
+websocket_stream_port: 8766
+heartbeat_interval: 5.0
+connection_timeout: 30.0
+websocket_max_size_bytes: null
