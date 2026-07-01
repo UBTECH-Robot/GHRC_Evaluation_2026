@@ -221,8 +221,8 @@ class IsaacSimRobotInterface:
 
     gripper_open_width = -0.0215
     gripper_close_width = 0.01
-    gripper_open_tau = -100.0
-    gripper_close_tau = 100.0
+    gripper_open_tau = -800.0
+    gripper_close_tau = 800.0
 
     sixforce_joint_names: list[str] = [
         "L_sixforce_joint",
@@ -264,7 +264,7 @@ class IsaacSimRobotInterface:
         self._waist_isaac_indices = None
         self._waist_init_positions = None
         self._ik_warn_counter = 0
-        self._smooth_alpha = 0.3
+        self._smooth_alpha = 0.8
         self._last_arm_positions = {}
         self._joint_value_map = {
             "L_elbow_roll_joint": -1.8963565338596158,
@@ -640,6 +640,7 @@ class IsaacSimRobotInterface:
         side semantics:
         - None: expects 4D [L_f1, L_f2, R_f1, R_f2]
         - "left"/"right": expects 2D
+        - NaN: skip position control for that joint (effort-only mode)
         """
         from isaacsim.core.utils.types import ArticulationActions
 
@@ -663,10 +664,17 @@ class IsaacSimRobotInterface:
                 raise ValueError(f"机器人接口Expected4Finger joint位置，got {target_fingers.shape[0]} ")
             control_indices = torch.tensor(self.finger_joint_indices, dtype=torch.int32)
 
+        valid_mask = ~torch.isnan(target_fingers)
+        if not torch.any(valid_mask):
+            return
+
+        filtered_positions = target_fingers[valid_mask]
+        filtered_indices = control_indices[valid_mask]
+
         self._articulation.apply_action(
             ArticulationActions(
-                joint_positions=target_fingers.unsqueeze(0),
-                joint_indices=control_indices
+                joint_positions=filtered_positions.unsqueeze(0),
+                joint_indices=filtered_indices,
             )
         )
 
@@ -951,4 +959,3 @@ class IsaacSimRobotInterface:
         smoothed = prev + alpha * (ik_positions - prev)
         self._last_arm_positions[side] = smoothed.copy()
         return smoothed
-

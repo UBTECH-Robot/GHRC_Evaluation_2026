@@ -253,7 +253,6 @@ class SimEvalContainer:
                 action = self._decode_action(action_message.get("action"))
                 action_dict = action_to_dict(action)
                 self.robot.send_action(action_dict)
-                self.robot.step(render=True)
 
                 step += 1
                 result.steps = step

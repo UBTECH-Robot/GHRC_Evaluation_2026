@@ -438,10 +438,10 @@ class WalkerS2sim(Robot):
                 self._hold_finger_positions = np.array([self._robot_interface.gripper_open_width]*4)
                 # self._hold_finger_positions = abs_action[14:18].copy()
             if abs_action.shape[0] >= 20:
-                self._left_gripping = float(abs_action[18]) > 0.5
+                self._left_gripping = float(abs_action[18]) < -0.5
                 if self._left_gripping:
                     self._hold_finger_positions[:2] = np.array([self._robot_interface.gripper_close_width]*2)
-                self._right_gripping = float(abs_action[19]) > 0.5
+                self._right_gripping = float(abs_action[19]) < -0.5
                 if self._right_gripping:
                     self._hold_finger_positions[2:4] = np.array([self._robot_interface.gripper_close_width]*2)
             # print(f"[_robot_control_callback] left_gripping={self._left_gripping}, right_gripping={self._right_gripping}")
@@ -520,31 +520,46 @@ class WalkerS2sim(Robot):
             target_arm_positions=self._hold_arm_positions.tolist(),
             task_num=self.config.task_cfg.get("task_number", 1)
         )
-        self._robot_interface.set_finger_positions(
-            target_fingers=self._hold_finger_positions.tolist(),
-            task_num=self.config.task_cfg.get("task_number", 1)
-        )
         self._robot_interface.set_body_joint_positions(
             target_body_positions=0.0,
             task_num=self.config.task_cfg.get("task_number", 1)
         )
 
-        # 夹持器控制：抓取时力控，非抓取时位置控
+        # 夹持器控制：抓取时关闭 PD 改为纯力控；释放卡滞时增加开爪助力。
         close_tau = getattr(self._robot_interface, "gripper_close_tau", 100.0)
-        efforts = [0.0, 0.0, 0.0, 0.0]
-        finger_pos = self._hold_finger_positions.copy()
+        open_tau = getattr(self._robot_interface, "gripper_open_tau", -100.0)
+        open_width = float(self._robot_interface.gripper_open_width)
+        stuck_threshold = 0.005
 
-        if self._left_gripping:
-            efforts[0] = close_tau
-            efforts[1] = close_tau
-            finger_pos[0] = float("nan")
-            finger_pos[1] = float("nan")
-        if self._right_gripping:
-            efforts[2] = close_tau
-            efforts[3] = close_tau
-            finger_pos[2] = float("nan")
-            finger_pos[3] = float("nan")
+        states = self._robot_interface.get_joint_states()
+        if states is not None and "finger_positions" in states:
+            actual_finger_pos = np.array(states["finger_positions"], dtype=np.float32)
+        else:
+            actual_finger_pos = np.full(4, open_width, dtype=np.float32)
 
+        gripping = [
+            self._left_gripping,
+            self._left_gripping,
+            self._right_gripping,
+            self._right_gripping,
+        ]
+        finger_pos_cmd: list[float] = []
+        efforts: list[float] = []
+        for i, is_gripping in enumerate(gripping):
+            if is_gripping:
+                finger_pos_cmd.append(float("nan"))
+                efforts.append(close_tau)
+            else:
+                finger_pos_cmd.append(open_width)
+                if actual_finger_pos[i] > open_width + stuck_threshold:
+                    efforts.append(open_tau)
+                else:
+                    efforts.append(0.0)
+
+        self._robot_interface.set_finger_positions(
+            target_fingers=finger_pos_cmd,
+            task_num=self.config.task_cfg.get("task_number", 1)
+        )
         self._robot_interface.apply_finger_efforts(efforts)
 
     def _score_input_record_callback(self, step_size: float) -> None:
@@ -882,6 +897,14 @@ class WalkerS2sim(Robot):
         if self._world:
             self._world.step(render=render)
             self._send_action_step_idx += 1
+
+    def pause_simulation(self) -> None:
+        """兼容旧同步接口；显式 step 模式下等待 action 不切换 timeline。"""
+        return
+
+    def resume_simulation(self) -> None:
+        """兼容旧同步接口；动作执行由 send_action() 内部显式 step 推进。"""
+        return
 
     def get_observation(self) -> RobotObservation:
         """
