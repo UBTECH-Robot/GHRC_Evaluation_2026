@@ -510,6 +510,9 @@ class SceneBuilder:
                             'position': [x, y, z],
                             'orientation': [qx, qy, qz, qw]}, ...]
         """
+        if self.cfg.get('task_number') == 2:
+            return self._get_task2_parts_world_poses()
+
         from pxr import UsdGeom, Usd
         import omni.usd
         stage = omni.usd.get_context().get_stage()
@@ -541,6 +544,43 @@ class SceneBuilder:
             except Exception as e:
                 print(f"[SceneBuilder] 查询 {prim_path} 位姿失败: {e}")
         return results
+
+    def _get_task2_parts_world_poses(self):
+        """Read Task2 poses from the RigidPrim view that owns those parts."""
+        rigid_prim = getattr(self, 'rigid_prim', None)
+        if rigid_prim is None:
+            print("[SceneBuilder] Task2 零件位姿查询失败: rigid_prim 未初始化")
+            return []
+
+        try:
+            positions, orientations = rigid_prim.get_world_poses()
+            positions = np.asarray(positions)
+            orientations = np.asarray(orientations)
+            if positions.ndim != 2 or positions.shape[1] != 3:
+                raise ValueError(f"invalid positions shape {positions.shape}")
+            if orientations.ndim != 2 or orientations.shape != (positions.shape[0], 4):
+                raise ValueError(f"invalid orientations shape {orientations.shape}")
+
+            prim_paths = getattr(rigid_prim, 'prim_paths', None)
+            if prim_paths is None:
+                prim_paths = getattr(rigid_prim, '_prim_paths', None)
+            if prim_paths is None or len(prim_paths) != positions.shape[0]:
+                prim_paths = [f"/Root/Part_{index}" for index in range(positions.shape[0])]
+
+            results = []
+            for index, (position, orientation) in enumerate(zip(positions, orientations, strict=True)):
+                w, x, y, z = orientation.tolist()
+                prim_path = str(prim_paths[index])
+                results.append({
+                    'prim_path': prim_path,
+                    'position': [float(value) for value in position],
+                    'orientation': [float(x), float(y), float(z), float(w)],
+                    'type': self.part_type_by_prim_path.get(prim_path, None),
+                })
+            return results
+        except Exception as exc:
+            print(f"[SceneBuilder] Task2 零件位姿查询失败: {exc}")
+            return []
 
     # ===================== 统一物体位姿接口（供数据采集/回放使用） =====================
     @staticmethod

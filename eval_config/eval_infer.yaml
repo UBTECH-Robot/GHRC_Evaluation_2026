@@ -18,7 +18,7 @@
 #   Ubtech_sim/config/<Task>.yaml 的 evaluation 字段。
 
 # ---- 任务选择 ----
-task: task4                         # [必填] task1 / task2 / task3 / task4；会被 CLI --task 覆盖
+task: task2                         # [必填] task1 / task2 / task3 / task4；会被 CLI --task 覆盖
 task_text: null                     # [可选] 任务自然语言描述；null 时使用内置 TASK_DEFAULT_TEXT
 task_config_path: null              # [可选] 任务 YAML 路径；null 时按 task 使用内置默认路径
                                     #  注意：非绝对路径会按本 YAML 所在目录 eval_config/ 解析
@@ -35,15 +35,15 @@ adapter_class: null                 # [可选] 自定义适配器类路径；设
 adapter_config: {}                  # [可选] 传入 adapter.load(..., config=adapter_config) 的自定义参数
 
 # ---- LeRobot 策略（adapter_class 为空且 adapter_type=lerobot 时生效）----
-policy_type: act                    # [条件必填] adapter_class 为空时必填；act / pi0 / diffusion
+policy_type: smolvla                    # [条件必填] adapter_class 为空时必填；act / pi0 / diffusion
 policy_path: null                   # [可选] 单任务共用模型路径；通常保持 null，改用 task_policy_paths
                                     #        注意：非绝对路径会按本 YAML 所在目录 eval_config/ 解析
 require_task_policy_paths: true     # [可选] true 表示不允许回退到源码内置默认 policy 路径
 task_policy_paths:                  # [条件必填] run_eval.sh all 跑四个任务时，在这里显式写每个任务的模型目录
-  task1: ../weight/weight/task1/act_001/checkpoints/160000/pretrained_model
-  task2: ../weight/weight/task2/act_001/checkpoints/050000/pretrained_model
+  task1: ../Part_Sorting/smolvla/pretrained_model
+  task2: ../Conveyor_Sorting/smolvla/pretrained_model
   task3: ../weight/weight/task3/act_001/checkpoints/100000/pretrained_model
-  task4: ../weight/weight/task4/act_001/checkpoints/100000/pretrained_model
+  task4: ../Packing_Box/smolvla/checkpoints/040000/pretrained_model
                                     # 请把上面四行改成你的真实权重目录；相对路径按 eval_config/ 解析
 
 # ---- WebSocket 服务（infer 监听端）----

@@ -54,6 +54,7 @@ from src.lerobot.sim_eval.protocol import (
     DEFAULT_WEBSOCKET_STREAM_PORT,
 )
 from src.lerobot.sim_eval.websocket_client import EvalWebSocketClient
+from src.lerobot.sim_eval.score_logging import format_task4_score_details
 
 logging.basicConfig(
     level=logging.INFO,
@@ -269,14 +270,20 @@ class SimEvalContainer:
 
                 if step % int(getattr(self.args, "print_every", 20)) == 0:
                     act_mae = action.abs().mean().item()
+                    score_details = (
+                        f" | {format_task4_score_details(metrics)}"
+                        if self.task == "task4"
+                        else ""
+                    )
                     logger.info(
-                        "[Episode %s/%s] step=%s/%s | Act_MAE: %.4f | Score: %s | %s",
+                        "[Episode %s/%s] step=%s/%s | Act_MAE: %.4f | Score: %s%s | %s",
                         episode_idx + 1,
                         self.num_episodes,
                         step,
                         self.max_steps,
                         act_mae,
                         result.score,
+                        score_details,
                         reason,
                     )
 
@@ -296,7 +303,18 @@ class SimEvalContainer:
                 if is_success:
                     result.status = "success"
                     result.finalize()
-                    logger.info("[Episode %s] SUCCESS: %s", episode_idx + 1, reason)
+                    score_details = (
+                        f" | {format_task4_score_details(metrics)}"
+                        if self.task == "task4"
+                        else ""
+                    )
+                    logger.info(
+                        "[Episode %s] SUCCESS: %s | Score: %s%s",
+                        episode_idx + 1,
+                        reason,
+                        result.score,
+                        score_details,
+                    )
                     self.summary.add_result(result)
                     save_episode(self.log_dir, result)
                     self._reset_robot()

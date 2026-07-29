@@ -15,7 +15,7 @@
 # Git
 .git
 .gitmodules
-
+assets/**
 # Python
 __pycache__/
 *.py[cod]
@@ -46,7 +46,7 @@ MANIFEST
 venv/
 env/
 ENV/
-
+assets/
 # IDE and local tools
 .idea/
 .vscode/
@@ -81,14 +81,16 @@ train_example/*
 !train_example/EXAMPLE/**
 
 # Downloaded datasets and weights
-challenge2026_baseline/
+# challenge2026_baseline/
+!challenge2026_baseline/
+!challenge2026_baseline/**
 challenge2026_dataset/
 datasets/
 weight/
 resources/
 *.h5
 *.hdf5
-*.safetensors
+# *.safetensors
 *.ckpt
 *.pth
 *.pt
