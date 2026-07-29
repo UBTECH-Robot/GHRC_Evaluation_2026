@@ -46,7 +46,7 @@ The evaluation system is divided into four parts: **it is recommended to read th
 
 | No. | Document | Description |
 |---|------|------|
-| 1 | [Evaluation User Guide](https://docs.ubtrobot.com/GHRC2026_EvalDocuments/docs/1/) | Explains the operation mode, configuration boundaries and custom policy integration entry of the evaluation system. |
-| 2 | [Custom Policy Integration Guide](https://docs.ubtrobot.com/GHRC2026_EvalDocuments/docs/2/) | Explains how to integrate a custom policy into the GHRC infer container. | GHRC infer container. |
-| 3 | [External Algorithm Migration Guide](https://docs.ubtrobot.com/GHRC2026_EvalDocuments/docs/3/) | Explains file placement, dependency declaration, integration with evaluation via `PolicyAdapter`, and pipeline verification with random action examples when migrating non-LeRobot projects to the GHRC evaluation repository. |
-| 4 | [Participant Submission Specification Guide](https://docs.ubtrobot.com/GHRC2026_EvalDocuments/docs/4/) | Explains the project structure, packaging operations and common issues for participant submissions. |
+| 1 | [Evaluation User Guide](https://docs.ubtrobot.com/GHRC2026_EvalDocuments/en/docs/1/) | Explains the operation mode, configuration boundaries and custom policy integration entry of the evaluation system. |
+| 2 | [Custom Policy Integration Guide](https://docs.ubtrobot.com/GHRC2026_EvalDocuments/en/docs/2) | Explains how to integrate a custom policy into the GHRC infer container. | GHRC infer container. |
+| 3 | [External Algorithm Migration Guide](https://docs.ubtrobot.com/GHRC2026_EvalDocuments/en/docs/3) | Explains file placement, dependency declaration, integration with evaluation via `PolicyAdapter`, and pipeline verification with random action examples when migrating non-LeRobot projects to the GHRC evaluation repository. |
+| 4 | [Participant Submission Specification Guide](https://docs.ubtrobot.com/GHRC2026_EvalDocuments/en/docs/4) | Explains the project structure, packaging operations and common issues for participant submissions. |
