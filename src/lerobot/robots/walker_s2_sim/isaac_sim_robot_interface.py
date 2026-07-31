@@ -221,8 +221,9 @@ class IsaacSimRobotInterface:
 
     gripper_open_width = -0.0215
     gripper_close_width = 0.01
-    gripper_open_tau = -800.0
-    gripper_close_tau = 800.0
+    gripper_open_tau = -100.0
+    gripper_close_tau = 100.0
+    gripper_open_tolerance = 0.005
 
     sixforce_joint_names: list[str] = [
         "L_sixforce_joint",
@@ -720,10 +721,91 @@ class IsaacSimRobotInterface:
             ArticulationActions(joint_efforts=t, joint_indices=idx)
         )
 
+    def build_gripper_control(
+        self,
+        left_gripping: bool,
+        right_gripping: bool,
+        actual_positions,
+    ) -> tuple[list[float], list[float]]:
+        """Build four-finger position and effort commands in articulation order."""
+        positions = np.asarray(actual_positions, dtype=np.float32).reshape(-1)
+        if positions.shape[0] != 4:
+            raise ValueError(f"Expected 4 actual finger positions, got {positions.shape[0]}")
+        if not np.all(np.isfinite(positions)):
+            raise ValueError("Actual finger positions must all be finite")
+
+        gripping = (left_gripping, left_gripping, right_gripping, right_gripping)
+        targets: list[float] = []
+        efforts: list[float] = []
+        for position, is_gripping in zip(positions, gripping, strict=True):
+            if is_gripping:
+                targets.append(self.gripper_close_width)
+                efforts.append(self.gripper_close_tau)
+            else:
+                targets.append(self.gripper_open_width)
+                needs_assist = position > self.gripper_open_width + self.gripper_open_tolerance
+                efforts.append(self.gripper_open_tau if needs_assist else 0.0)
+        return targets, efforts
+
+    def apply_gripper_control(self, target_positions, efforts) -> None:
+        """Submit four-finger position and effort targets as one articulation action."""
+        from isaacsim.core.utils.types import ArticulationActions
+
+        if self._articulation is None:
+            raise RuntimeError("Articulation uninitialized")
+        if len(self.finger_joint_indices) != 4:
+            raise RuntimeError(
+                f"Expected 4 finger joint indices, got {len(self.finger_joint_indices)}"
+            )
+
+        positions = torch.as_tensor(target_positions, dtype=torch.float32).flatten()
+        effort_values = torch.as_tensor(efforts, dtype=torch.float32).flatten()
+        if positions.shape[0] != 4 or effort_values.shape[0] != 4:
+            raise ValueError(
+                "Gripper control expects 4 positions and 4 efforts in "
+                "[L_finger1, L_finger2, R_finger1, R_finger2] order"
+            )
+        if not torch.all(torch.isfinite(positions)) or not torch.all(torch.isfinite(effort_values)):
+            raise ValueError("Gripper positions and efforts must all be finite")
+
+        self._articulation.apply_action(
+            ArticulationActions(
+                joint_positions=positions.unsqueeze(0),
+                joint_efforts=effort_values.unsqueeze(0),
+                joint_indices=torch.tensor(self.finger_joint_indices, dtype=torch.int32),
+            )
+        )
+
+    def snap_gripper_open(self, side: str) -> None:
+        """Force one gripper open once and clear its velocity on an opening edge."""
+        if self._articulation is None:
+            raise RuntimeError("Articulation uninitialized")
+        if len(self.finger_joint_indices) != 4:
+            raise RuntimeError(
+                f"Expected 4 finger joint indices, got {len(self.finger_joint_indices)}"
+            )
+        if side == "left":
+            indices = self.finger_joint_indices[:2]
+        elif side == "right":
+            indices = self.finger_joint_indices[2:]
+        else:
+            raise ValueError(f"side must be 'left' or 'right', got {side!r}")
+
+        joint_indices = torch.tensor(indices, dtype=torch.int32)
+        self._articulation.set_joint_positions(
+            torch.full((2,), self.gripper_open_width, dtype=torch.float32),
+            joint_indices=joint_indices,
+        )
+        self._articulation.set_joint_velocities(
+            torch.zeros(2, dtype=torch.float32),
+            joint_indices=joint_indices,
+        )
+
     def close_gripper(self, side: Optional[str] = None, task_name: Optional[str] = None):
         """Close gripper on specified side (without world.step, safe to call in callback)"""
         from isaacsim.core.utils.types import ArticulationActions
         target_pos = [self.gripper_close_width] * 2
+        efforts = [self.gripper_close_tau] * 2
 
         if side == "left":
             control_finger_indices = torch.tensor(self.finger_joint_indices[:2], dtype=torch.int32)
@@ -732,10 +814,12 @@ class IsaacSimRobotInterface:
         else:
             control_finger_indices = torch.tensor(self.finger_joint_indices, dtype=torch.int32)
             target_pos = target_pos * 2
+            efforts = efforts * 2
 
         self._articulation.apply_action(
             ArticulationActions(
                 joint_positions=torch.tensor([target_pos], dtype=torch.float32),
+                joint_efforts=torch.tensor([efforts], dtype=torch.float32),
                 joint_indices=control_finger_indices,
             )
         )
@@ -744,6 +828,7 @@ class IsaacSimRobotInterface:
         """Open gripper on specified side (without world.step, safe to call in callback)"""
         from isaacsim.core.utils.types import ArticulationActions
         target_pos = [self.gripper_open_width] * 2
+        efforts = [0.0] * 2
 
         if side == "left":
             control_finger_indices = torch.tensor(self.finger_joint_indices[:2], dtype=torch.int32)
@@ -752,10 +837,12 @@ class IsaacSimRobotInterface:
         else:
             control_finger_indices = torch.tensor(self.finger_joint_indices, dtype=torch.int32)
             target_pos = target_pos * 2
+            efforts = efforts * 2
 
         self._articulation.apply_action(
             ArticulationActions(
                 joint_positions=torch.tensor([target_pos], dtype=torch.float32),
+                joint_efforts=torch.tensor([efforts], dtype=torch.float32),
                 joint_indices=control_finger_indices,
             )
         )

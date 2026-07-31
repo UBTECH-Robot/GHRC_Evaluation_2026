@@ -187,7 +187,7 @@ def _build_task4_args(task_config: dict[str, Any], evaluation: dict[str, Any]) -
     官方默认值：
     - 短边: 每边 15 分，需端执行器接触后闭合，满分 30。
     - 长边: 每边 15 分，需端执行器接触后闭合，满分 30。
-    - 时间: 满分 10，180 秒内完成，每超 30 秒扣 5 分。
+    - 时间: 满分 40，180 秒内完成，每超 30 秒扣 5 分。
     - 已移除官方不存在的协作系数（single_arm_factor / bimanual_factor）。
     """
     del task_config
@@ -202,11 +202,11 @@ def _build_task4_args(task_config: dict[str, Any], evaluation: dict[str, Any]) -
         "task4_success_hold_steps": int(evaluation.get("success_hold_steps", 10)),
         "task4_short_edge_score_per_edge": int(evaluation.get("short_edge_score_per_edge", 15)),
         "task4_long_edge_score_per_edge": int(evaluation.get("long_edge_score_per_edge", 15)),
-        "task4_time_full_score": int(evaluation.get("time_full_score", 10)),
+        "task4_time_full_score": int(evaluation.get("time_full_score", 40)),
         "task4_time_full_time_seconds": float(evaluation.get("time_full_time_seconds", 180.0)),
         "task4_time_penalty_interval_seconds": float(evaluation.get("time_penalty_interval_seconds", 30.0)),
         "task4_time_penalty_per_interval": int(evaluation.get("time_penalty_per_interval", 5)),
-        "task4_contact_distance_threshold": float(evaluation.get("contact_distance_threshold", 0.05)),
+        "task4_contact_distance_threshold": float(evaluation.get("contact_distance_threshold", 0.5)),
         "task4_box_pose_position_threshold": float(evaluation.get("box_pose_position_threshold", 1.0)),
         "task4_box_pose_orientation_threshold": float(evaluation.get("box_pose_orientation_threshold", 1.0)),
     }

@@ -376,6 +376,77 @@ class WalkerS2sim(Robot):
                 pass
         self._callbacks_registered = False
 
+    def _synchronize_physics_scene_steps(self, stage) -> int:
+        """Make every composed PhysicsScene use the configured World step rate."""
+        if not self.config.synchronize_physics_scene_steps:
+            return 0
+
+        physics_dt = float(self.config.physics_dt)
+        if not np.isfinite(physics_dt) or physics_dt <= 0.0:
+            raise ValueError(f"physics_dt must be a finite positive value, got {physics_dt!r}")
+        if stage is None:
+            raise RuntimeError("Cannot synchronize PhysicsScene steps without a USD stage")
+
+        from pxr import PhysxSchema, UsdPhysics
+
+        target_hz = 1.0 / physics_dt
+        scene_count = 0
+        changed_count = 0
+        summaries: list[str] = []
+        for prim in stage.Traverse():
+            if not prim.IsA(UsdPhysics.Scene):
+                continue
+            scene_count += 1
+            if prim.HasAPI(PhysxSchema.PhysxSceneAPI):
+                scene_api = PhysxSchema.PhysxSceneAPI(prim)
+            else:
+                scene_api = PhysxSchema.PhysxSceneAPI.Apply(prim)
+            step_attr = scene_api.GetTimeStepsPerSecondAttr()
+            previous_hz = step_attr.Get()
+            needs_update = previous_hz is None or not np.isclose(float(previous_hz), target_hz)
+            if needs_update:
+                step_attr.Set(target_hz)
+                changed_count += 1
+            summaries.append(f"{prim.GetPath()}:{previous_hz}->{target_hz:g}Hz")
+
+        if scene_count == 0:
+            logger.warning("No PhysicsScene found while synchronizing simulation steps")
+        else:
+            logger.info(
+                "Synchronized %d PhysicsScene steps (%d changed): %s",
+                scene_count,
+                changed_count,
+                ", ".join(summaries),
+            )
+        return changed_count
+
+    def _sanitize_finger_articulation_limits(self, stage) -> int:
+        """Remove ignored PhysxLimitAPI instances from articulation finger joints."""
+        if not self.config.sanitize_finger_articulation_limits:
+            return 0
+        if stage is None:
+            raise RuntimeError("Cannot sanitize finger joint limits without a USD stage")
+
+        from pxr import PhysxSchema
+
+        removed_count = 0
+        joints_root = f"{self.config.prim_path.rstrip('/')}/joints"
+        for joint_name in IsaacSimRobotInterface.finger_joint_names:
+            prim = stage.GetPrimAtPath(f"{joints_root}/{joint_name}")
+            if not prim.IsValid():
+                logger.warning("Finger joint prim not found for limit sanitization: %s", prim.GetPath())
+                continue
+            for schema_name in list(prim.GetAppliedSchemas()):
+                prefix, separator, instance_name = schema_name.partition(":")
+                if prefix != "PhysxLimitAPI" or not separator or not instance_name:
+                    continue
+                if prim.RemoveAPI(PhysxSchema.PhysxLimitAPI, instance_name):
+                    removed_count += 1
+                    logger.info("Removed unsupported %s from %s", schema_name, prim.GetPath())
+
+        logger.info("Removed %d unsupported finger articulation limit APIs", removed_count)
+        return removed_count
+
     # ---- 回调实现 ----
 
     def _robot_control_callback(self, step_size: float) -> None:
@@ -422,6 +493,9 @@ class WalkerS2sim(Robot):
                 logger.info("[callback] Snapshot initial joint state as hold target")
             else:
                 return
+
+        previous_left_gripping = self._left_gripping
+        previous_right_gripping = self._right_gripping
 
         # 读取并消费 Inference mode 的 pending action
         with self._callback_lock:
@@ -525,11 +599,8 @@ class WalkerS2sim(Robot):
             task_num=self.config.task_cfg.get("task_number", 1)
         )
 
-        # 夹持器控制：抓取时关闭 PD 改为纯力控；释放卡滞时增加开爪助力。
-        close_tau = getattr(self._robot_interface, "gripper_close_tau", 100.0)
-        open_tau = getattr(self._robot_interface, "gripper_open_tau", -100.0)
+        # 夹持器控制：四指位置和力矩在同一 ArticulationActions 中提交。
         open_width = float(self._robot_interface.gripper_open_width)
-        stuck_threshold = 0.005
 
         states = self._robot_interface.get_joint_states()
         if states is not None and "finger_positions" in states:
@@ -537,30 +608,30 @@ class WalkerS2sim(Robot):
         else:
             actual_finger_pos = np.full(4, open_width, dtype=np.float32)
 
-        gripping = [
-            self._left_gripping,
+        finger_pos_cmd, efforts = self._robot_interface.build_gripper_control(
             self._left_gripping,
             self._right_gripping,
-            self._right_gripping,
-        ]
-        finger_pos_cmd: list[float] = []
-        efforts: list[float] = []
-        for i, is_gripping in enumerate(gripping):
-            if is_gripping:
-                finger_pos_cmd.append(float("nan"))
-                efforts.append(close_tau)
-            else:
-                finger_pos_cmd.append(open_width)
-                if actual_finger_pos[i] > open_width + stuck_threshold:
-                    efforts.append(open_tau)
-                else:
-                    efforts.append(0.0)
-
-        self._robot_interface.set_finger_positions(
-            target_fingers=finger_pos_cmd,
-            task_num=self.config.task_cfg.get("task_number", 1)
+            actual_finger_pos,
         )
-        self._robot_interface.apply_finger_efforts(efforts)
+        self._robot_interface.apply_gripper_control(finger_pos_cmd, efforts)
+
+        if self.config.gripper_release_snap_enabled:
+            release_sides = []
+            tolerance = self._robot_interface.gripper_open_tolerance
+            if previous_left_gripping and not self._left_gripping:
+                if np.any(actual_finger_pos[:2] > open_width + tolerance):
+                    self._robot_interface.snap_gripper_open("left")
+                    release_sides.append("left")
+            if previous_right_gripping and not self._right_gripping:
+                if np.any(actual_finger_pos[2:] > open_width + tolerance):
+                    self._robot_interface.snap_gripper_open("right")
+                    release_sides.append("right")
+            if release_sides:
+                logger.info(
+                    "[gripper] forced release on transition sides=%s pre_release_positions=%s",
+                    release_sides,
+                    actual_finger_pos.tolist(),
+                )
 
     def _score_input_record_callback(self, step_size: float) -> None:
         """记录分数/目标物体变换"""
@@ -662,6 +733,7 @@ class WalkerS2sim(Robot):
             physics_dt=self.config.physics_dt,
             rendering_dt=self.config.rendering_dt,
         )
+        self._synchronize_physics_scene_steps(omni_usd.get_context().get_stage())
         self._world.initialize_physics()
         logger.info("World 初始化完成")
 
@@ -688,6 +760,9 @@ class WalkerS2sim(Robot):
             self._scene_builder = SceneBuilder(self.config.task_cfg, data_logger=data_logger)
             self._scene_builder.build_all() 
             self._scene_builder.build_robot()
+            stage = omni_usd.get_context().get_stage()
+            self._sanitize_finger_articulation_limits(stage)
+            self._synchronize_physics_scene_steps(stage)
             logger.info("SceneBuilder 场景构建完成")
             
             # 启动仿真
@@ -874,8 +949,8 @@ class WalkerS2sim(Robot):
                         "L_finger2_joint.pos": finger_pos[1],
                         "R_finger1_joint.pos": finger_pos[2],
                         "R_finger2_joint.pos": finger_pos[3],
-                        "left_gripper": 1.0 if self._left_gripping else -1.0,
-                        "right_gripper": 1.0 if self._right_gripping else -1.0,
+                        "left_gripper": -1.0 if self._left_gripping else 1.0,
+                        "right_gripper": -1.0 if self._right_gripping else 1.0,
                     }
                 else:
                     raise RuntimeError("无法获取关节状态以构建 action 字典")
@@ -947,8 +1022,8 @@ class WalkerS2sim(Robot):
                     obs[f"{joint_name}.pos"] = torch.tensor(finger_pos[i], dtype=torch.float32)
 
                 # 2 夹持器控制
-                obs["left_gripper"] = torch.tensor(1.0 if self._left_gripping else -1.0, dtype=torch.float32)
-                obs["right_gripper"] = torch.tensor(1.0 if self._right_gripping else -1.0, dtype=torch.float32)
+                obs["left_gripper"] = torch.tensor(-1.0 if self._left_gripping else 1.0, dtype=torch.float32)
+                obs["right_gripper"] = torch.tensor(-1.0 if self._right_gripping else 1.0, dtype=torch.float32)
             else:
                 raise RuntimeError("无法获取关节状态")
 
@@ -1084,6 +1159,10 @@ class WalkerS2sim(Robot):
         # 4. 重置机器人关节到初始 Pose
         if self._robot_interface is not None:
             self._robot_interface.reset()
+            self._robot_interface.apply_gripper_control(
+                [self._robot_interface.gripper_open_width] * 4,
+                [0.0] * 4,
+            )
 
         # 5. 推进物理仿真，让新 Pose 生效 + 物理稳定
         settle_steps = 5

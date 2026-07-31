@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import copy
+from typing import Any
 
 import torch
 from torch import nn
@@ -23,6 +24,33 @@ from transformers import (
     AutoProcessor,
     SmolVLMForConditionalGeneration,
 )
+
+
+def _load_pretrained_cache_first(
+    loader: Any,
+    model_id: str,
+    component_name: str,
+    **kwargs: Any,
+) -> Any:
+    """Load a Hugging Face component locally, falling back online only if files are missing."""
+    try:
+        component = loader.from_pretrained(
+            model_id,
+            local_files_only=True,
+            **kwargs,
+        )
+        print(f"Loaded {component_name} from local Hugging Face cache", flush=True)
+        return component
+    except OSError as local_error:
+        print(
+            f"Local cache is incomplete for {component_name}; trying Hugging Face download: {local_error}",
+            flush=True,
+        )
+        return loader.from_pretrained(
+            model_id,
+            local_files_only=False,
+            **kwargs,
+        )
 
 
 def apply_rope(x, positions, max_wavelength=10_000):
@@ -75,16 +103,26 @@ class SmolVLMWithExpertModel(nn.Module):
         super().__init__()
         if load_vlm_weights:
             print(f"Loading  {model_id} weights ...")
-            self.vlm = AutoModelForImageTextToText.from_pretrained(
+            self.vlm = _load_pretrained_cache_first(
+                AutoModelForImageTextToText,
                 model_id,
+                "VLM weights",
                 torch_dtype="bfloat16",
                 low_cpu_mem_usage=True,
             )
             config = self.vlm.config
         else:
-            config = AutoConfig.from_pretrained(model_id)
+            config = _load_pretrained_cache_first(
+                AutoConfig,
+                model_id,
+                "VLM config",
+            )
             self.vlm = SmolVLMForConditionalGeneration(config=config)
-        self.processor = AutoProcessor.from_pretrained(model_id)
+        self.processor = _load_pretrained_cache_first(
+            AutoProcessor,
+            model_id,
+            "VLM processor",
+        )
         if num_vlm_layers > 0:
             print(f"Reducing the number of VLM layers to {num_vlm_layers} ...")
             self.get_vlm_model().text_model.layers = self.get_vlm_model().text_model.layers[:num_vlm_layers]

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Usage: ./run_eval.sh task4 | all
+# Usage: ./run_eval.sh [task1 task2 ... | all]
 # Dual-container evaluation:
-#   - infer (CPU) exposes WebSocket services
+#   - infer exposes WebSocket services and may use GPU-backed policies
 #   - sim-eval (GPU) connects to infer and runs Isaac Sim evaluation
 
 set -Eeuo pipefail
@@ -16,9 +16,23 @@ warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TASK="${1:-all}"
 ALL_TASKS=("task4" "task1" "task2" "task3")
-[[ "${TASK}" == "all" ]] && TASKS=("${ALL_TASKS[@]}") || TASKS=("${TASK}")
+
+if (( $# == 0 )) || { (( $# == 1 )) && [[ "$1" == "all" ]]; }; then
+    TASKS=("${ALL_TASKS[@]}")
+else
+    TASKS=("$@")
+    for task in "${TASKS[@]}"; do
+        if [[ "${task}" == "all" ]]; then
+            error "all 不能与其他任务同时使用"
+            exit 2
+        fi
+        if [[ ! " ${ALL_TASKS[*]} " =~ " ${task} " ]]; then
+            error "未知任务: ${task}；可选值: ${ALL_TASKS[*]} 或 all"
+            exit 2
+        fi
+    done
+fi
 
 INFER_IMAGE="${INFER_IMAGE:-ghrc-eval-infer:latest}"
 SIM_IMAGE="${SIM_IMAGE:-ghrc-eval-sim:latest}"
@@ -29,12 +43,15 @@ SIM_CONFIG="${SIM_CONFIG:-eval_config/eval_sim.yaml}"
 
 ISAAC_CACHE="${ISAAC_CACHE_ROOT:-${HOME}/.cache/isaac_sim_container}"
 HF_CACHE="${HF_CACHE:-${HOME}/.cache/huggingface}"
+HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
+# Unset: use cached files first and download only missing files. Set to 1 to force offline mode.
+HF_OFFLINE="${HF_OFFLINE:-}"
 HEADLESS="${HEADLESS:-1}"
 PIP_MIRROR="${PIP_MIRROR:-https://pypi.tuna.tsinghua.edu.cn/simple}"
-INFER_READY_TIMEOUT="${INFER_READY_TIMEOUT:-300}"
+INFER_READY_TIMEOUT="${INFER_READY_TIMEOUT:-600}"
 RUNTIME_BOOTSTRAP="${RUNTIME_BOOTSTRAP:-1}"
 
-DEFAULT_LOG_ROOT="${HOME}/.cache/challenge_baseline_runner"
+DEFAULT_LOG_ROOT="${SCRIPT_DIR}/eval_logs/challenge_baseline_runner"
 LOG_ROOT="${LOG_ROOT:-${DEFAULT_LOG_ROOT}}"
 RUN_ID="${RUN_ID:-$(date +%Y%m%d-%H%M%S)}"
 RUN_LOG_DIR="${LOG_ROOT}/${RUN_ID}"
@@ -228,7 +245,7 @@ prepare_environment() {
 
     if ! mkdir -p "${RUN_LOG_DIR}" 2>/dev/null; then
         error "日志目录不可写: ${RUN_LOG_DIR}"
-        error "请设置可写的 LOG_ROOT，例如: export LOG_ROOT=\$HOME/.cache/challenge_baseline_runner"
+        error "请设置可写的 LOG_ROOT，例如: export LOG_ROOT=${SCRIPT_DIR}/eval_logs/challenge_baseline_runner"
         exit 1
     fi
 
@@ -250,7 +267,14 @@ run_eval() {
     local infer_launcher_pid
     local infer_control_port
     local infer_stream_port
+    local -a hf_offline_args=()
 
+    if [[ -n "${HF_OFFLINE}" ]]; then
+        hf_offline_args+=(
+            -e "HF_HUB_OFFLINE=${HF_OFFLINE}"
+            -e "TRANSFORMERS_OFFLINE=${HF_OFFLINE}"
+        )
+    fi
     infer_control_port="$(read_yaml_scalar "${INFER_CONFIG}" "websocket_control_port" "8765")"
     infer_stream_port="$(read_yaml_scalar "${INFER_CONFIG}" "websocket_stream_port" "8766")"
 
@@ -267,8 +291,12 @@ run_eval() {
     info "启动 infer 容器..."
     docker run --rm --name "${infer_name}" \
         --entrypoint /bin/bash \
-        --privileged --network host --user root --shm-size=8g \
+        --privileged --network host --user root --gpus all --shm-size=8g \
         -v "${HOST_WS}:${CONTAINER_WS}:rw" -w "${CONTAINER_WS}" \
+        -v "${HF_CACHE}:/root/.cache/huggingface:rw" \
+        -e "HF_ENDPOINT=${HF_ENDPOINT}" \
+        -e PYTHONUNBUFFERED=1 \
+        "${hf_offline_args[@]}" \
         "${INFER_IMAGE}" \
         -c "cd ${CONTAINER_WS}; $(runtime_bootstrap_cmd) ${INFER_PY} -m lerobot.scripts.ghrc_eval_infer ${infer_args}" \
         &> "${infer_log_file}" &

@@ -81,7 +81,8 @@ train_example/*
 !train_example/EXAMPLE/**
 
 # Downloaded datasets and weights
-challenge2026_baseline/
+!challenge2026_baseline/
+!challenge2026_baseline/**
 challenge2026_dataset/
 datasets/
 weight/

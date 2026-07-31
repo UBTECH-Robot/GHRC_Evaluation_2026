@@ -49,7 +49,7 @@
 
 | # | 文档 | 说明 |
 |---|------|------|
-| 1 | [评测使用指南](https://docs.ubtrobot.com/GHRC2026_TechnicalDocuments/docs/1/) | 说明评测系统运行方式、配置边界、自定义策略接入入口。 |
-| 2 | [自定义策略接入指南](https://docs.ubtrobot.com/GHRC2026_TechnicalDocuments/docs/2/) | 说明如何把自定义 policy 接入 GHRC infer 容器。 |
-| 3 | [外部算法迁移指南](https://docs.ubtrobot.com/GHRC2026_TechnicalDocuments/docs/3/) | 说明把非 LeRobot 项目迁移到 GHRC 评测仓库时，文件应如何放置、如何声明依赖、如何通过 `PolicyAdapter` 接入评测，以及如何用随机动作示例验证迁移链路。 |
-| 4 | [选手提交作品规范指南](https://docs.ubtrobot.com/GHRC2026_TechnicalDocuments/docs/4/) | 说明选手提交项目的结构、打包操作、常见问题。 |
+| 1 | [评测使用指南](https://docs.ubtrobot.com/GHRC2026_EvalDocuments/docs/1/) | 说明评测系统运行方式、配置边界、自定义策略接入入口。 |
+| 2 | [自定义策略接入指南](https://docs.ubtrobot.com/GHRC2026_EvalDocuments/docs/2/) | 说明如何把自定义 policy 接入 GHRC infer 容器。 |
+| 3 | [外部算法迁移指南](https://docs.ubtrobot.com/GHRC2026_EvalDocuments/docs/3/)| 说明把非 LeRobot 项目迁移到 GHRC 评测仓库时，文件应如何放置、如何声明依赖、如何通过 `PolicyAdapter` 接入评测，以及如何用随机动作示例验证迁移链路。 |
+| 4 | [选手提交作品规范指南](https://docs.ubtrobot.com/GHRC2026_EvalDocuments/docs/4/)| 说明选手提交项目的结构、打包操作、常见问题。 |

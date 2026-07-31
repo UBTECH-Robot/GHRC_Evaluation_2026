@@ -780,12 +780,16 @@ class Task4Assertion(TaskAssertion):
         self._box_pose_position_threshold = box_pose_position_threshold
         self._box_pose_orientation_threshold = box_pose_orientation_threshold
         self._contact_distance_threshold = float(contact_distance_threshold)
+        if not np.isfinite(self._contact_distance_threshold) or self._contact_distance_threshold <= 0:
+            raise ValueError("task4 contact_distance_threshold 必须是大于 0 的有限数值")
         self._consecutive_success = 0
         self._episode_start_time = time.time()
         self._last_step: int = 0
         self._action_tracker = Task4EpisodeActionTracker()
         self._contacted_short_edges: set[int] = set()
         self._contacted_long_edges: set[int] = set()
+        self._short_edge_min_distances = [float("inf"), float("inf")]
+        self._long_edge_min_distances = [float("inf"), float("inf")]
 
     @property
     def target_box_joints(self) -> np.ndarray:
@@ -804,6 +808,8 @@ class Task4Assertion(TaskAssertion):
         self._action_tracker.reset()
         self._contacted_short_edges.clear()
         self._contacted_long_edges.clear()
+        self._short_edge_min_distances = [float("inf"), float("inf")]
+        self._long_edge_min_distances = [float("inf"), float("inf")]
 
     def _update_edge_contacts(self, robot: WalkerS2sim) -> None:
         """基于端执行器与盒子边缘的接近距离更新接触状态。
@@ -813,16 +819,28 @@ class Task4Assertion(TaskAssertion):
         若 Isaac Sim 原生接触传感器可用，可替换本方法内部实现。
         """
         ee_poses = get_robot_ee_poses(robot)
-        ee_points = []
+        scene_builder = getattr(robot, "_scene_builder", None)
+        coordinate_transform = getattr(scene_builder, "coordinate_transform", None)
+        if coordinate_transform is None or not hasattr(coordinate_transform, "robot_to_world"):
+            raise RuntimeError("Task4 接触判定缺少机器人基坐标到世界坐标的转换接口")
+
+        ee_points: list[np.ndarray] = []
         for value in ee_poses.values():
             vec = np.asarray(value, dtype=np.float32).reshape(-1)
             if vec.size >= 3:
-                ee_points.append(vec[:3])
+                world_point = np.asarray(
+                    coordinate_transform.robot_to_world(vec[:3]),
+                    dtype=np.float32,
+                ).reshape(-1)
+                if world_point.size >= 3 and np.all(np.isfinite(world_point[:3])):
+                    ee_points.append(world_point[:3])
         if not ee_points:
-            return
+            raise RuntimeError("Task4 接触判定未获得有效的世界坐标系端执行器位置")
 
-        box_pos, _ = robot._scene_builder.box_articulation.get_world_poses()
+        box_pos, _ = scene_builder.box_articulation.get_world_poses()
         center = np.asarray(box_pos, dtype=np.float32).reshape(-1)[:3]
+        if center.size != 3 or not np.all(np.isfinite(center)):
+            raise RuntimeError("Task4 接触判定未获得有效的箱子世界坐标")
         short_edge_points = [
             center + np.array([0.0, -0.20, 0.12], dtype=np.float32),
             center + np.array([0.0, 0.20, 0.12], dtype=np.float32),
@@ -832,11 +850,20 @@ class Task4Assertion(TaskAssertion):
             center + np.array([0.30, 0.0, 0.12], dtype=np.float32),
         ]
 
-        for idx, edge_point in enumerate(short_edge_points):
-            if min(float(np.linalg.norm(edge_point - ee)) for ee in ee_points) <= self._contact_distance_threshold:
+        self._short_edge_min_distances = [
+            min(float(np.linalg.norm(edge_point - ee)) for ee in ee_points)
+            for edge_point in short_edge_points
+        ]
+        self._long_edge_min_distances = [
+            min(float(np.linalg.norm(edge_point - ee)) for ee in ee_points)
+            for edge_point in long_edge_points
+        ]
+
+        for idx, distance in enumerate(self._short_edge_min_distances):
+            if distance <= self._contact_distance_threshold:
                 self._contacted_short_edges.add(idx)
-        for idx, edge_point in enumerate(long_edge_points):
-            if min(float(np.linalg.norm(edge_point - ee)) for ee in ee_points) <= self._contact_distance_threshold:
+        for idx, distance in enumerate(self._long_edge_min_distances):
+            if distance <= self._contact_distance_threshold:
                 self._contacted_long_edges.add(idx)
 
     def __call__(
@@ -951,8 +978,12 @@ class Task4Assertion(TaskAssertion):
             "task4_long_edge_closed": long_info.get("long_edge_closed", [False, False]),
             "task4_long_edge_errors": long_info.get("long_edge_errors", [float("inf"), float("inf")]),
             "task4_elapsed_seconds": float(elapsed_seconds),
+            "task4_time_full_time_seconds": float(self._time_full_time_seconds),
             "task4_contacted_short_edges": int(len(self._contacted_short_edges)),
             "task4_contacted_long_edges": int(len(self._contacted_long_edges)),
+            "task4_short_edge_min_distances": list(self._short_edge_min_distances),
+            "task4_long_edge_min_distances": list(self._long_edge_min_distances),
+            "task4_contact_distance_threshold": float(self._contact_distance_threshold),
             "is_success": is_success,
             "terminal_pose": terminal_pose,
             "terminal_time": terminal_time,

@@ -762,12 +762,12 @@ def task4_check_long_edge_close_score(
 
 def task4_time_score(
     elapsed_seconds: float,
-    full_score: int = 10,
+    full_score: int = 40,
     full_time_seconds: float = 180.0,
     penalty_interval_seconds: float = 30.0,
     penalty_per_interval: int = 5,
 ) -> int:
-    """Task4 时间评分（官方标准，满分 10）。
+    """Task4 时间评分（官方标准，满分 40）。
 
     180 秒内完成得满分，每超 30 秒扣 5 分，最低 0 分。
     """
@@ -800,16 +800,11 @@ def task4_calculate_total_score(
     官方标准：
     - 纸箱短边是否闭合：30分
     - 纸箱长边是否闭合：30分
-    - 时间分：10分
-
-    注意：
-    截图还规定“单臂完成只能获得70%分数，双臂协同获得100%分数”。
-    但当前函数接口没有 is_bimanual_collaboration 参数，因此这里不能在不改变接口的情况下判断单双臂。
-    若外部已调用 task4_get_bimanual_collaboration_factor()，应在外层用该系数换算最终分。
+    - 时间分：40分
     """
     short_edge_score = int(max(0, min(30, int(short_edge_score))))
     long_edge_score = int(max(0, min(30, int(long_edge_score))))
-    time_score = int(max(0, min(10, int(time_score))))
+    time_score = int(max(0, min(40, int(time_score))))
 
     raw_score = short_edge_score + long_edge_score + time_score
 

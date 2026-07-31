@@ -87,12 +87,15 @@ class WalkerS2Config(RobotConfig):
     sim_height: int = 720
     physics_dt: float = 1.0 / 200.0
     rendering_dt: float = 1.0 / 20.0
+    synchronize_physics_scene_steps: bool = True
 
     # 控制设置
     # 键盘控制的速度级别 (rad/step)
     speed_levels: list[float] = field(default_factory=lambda: [0.010, 0.035, 0.15])
     default_speed_index: int = 1  
     tracking_interp_steps: int = 100
+    gripper_release_snap_enabled: bool = True
+    sanitize_finger_articulation_limits: bool = True
 
 
     teleop_time_s: Optional[float] = None  # None 表示无限时长

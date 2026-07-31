@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, TypeAlias
 from pathlib import Path
+import time
 import yaml
 from .const import TASK_DEFAULT_CONFIG_PATH
 import numpy as np
@@ -16,6 +17,7 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 PartPoseDict: TypeAlias = dict[str, Any]
@@ -102,24 +104,39 @@ def load_policy(policy_path: str, policy_type: str, device: str) -> Any:
     """统一策略加载：通过 factory 支持 act / pi0 及未来扩展。"""
     from src.lerobot.policies.factory import get_policy_class
 
+    load_started_at = time.monotonic()
     path_obj = Path(policy_path).expanduser().absolute()
     is_local = path_obj.is_dir()
+    logger.info(
+        "开始加载 policy：type=%s path=%s local=%s device=%s",
+        policy_type,
+        path_obj,
+        is_local,
+        device,
+    )
 
     policy_cls = get_policy_class(policy_type)
     config_cls = policy_cls.config_class
+    phase_started_at = time.monotonic()
     cfg = config_cls.from_pretrained(str(path_obj), local_files_only=is_local)
+    logger.info("policy 配置加载完成，耗时 %.1fs", time.monotonic() - phase_started_at)
     cfg.pretrained_path = str(path_obj)
     cfg.device = device
 
+    phase_started_at = time.monotonic()
     policy = policy_cls.from_pretrained(
         pretrained_name_or_path=str(path_obj),
         config=cfg,
         local_files_only=is_local,
     )
+    logger.info("policy 权重加载完成，耗时 %.1fs", time.monotonic() - phase_started_at)
+    phase_started_at = time.monotonic()
     policy = policy.to(torch.device(device))
+    logger.info("policy 迁移到 %s 完成，耗时 %.1fs", device, time.monotonic() - phase_started_at)
     policy.eval()
     if hasattr(policy, "reset"):
         policy.reset()
+    logger.info("policy 加载总耗时 %.1fs", time.monotonic() - load_started_at)
     return policy
 
 
@@ -178,24 +195,57 @@ def build_workspace_limits(cfg: dict[str, Any]) -> dict[str, tuple[float, float]
 
 # ── WalkerS2sim 观测/动作 格式转换 ──────────────────────────
 
+WALKER_S2_STATE_ORDER: tuple[str, ...] = (
+    "L_shoulder_pitch_joint.pos",
+    "L_shoulder_roll_joint.pos",
+    "L_shoulder_yaw_joint.pos",
+    "L_elbow_roll_joint.pos",
+    "L_elbow_yaw_joint.pos",
+    "L_wrist_pitch_joint.pos",
+    "L_wrist_roll_joint.pos",
+    "R_shoulder_pitch_joint.pos",
+    "R_shoulder_roll_joint.pos",
+    "R_shoulder_yaw_joint.pos",
+    "R_elbow_roll_joint.pos",
+    "R_elbow_yaw_joint.pos",
+    "R_wrist_pitch_joint.pos",
+    "R_wrist_roll_joint.pos",
+    "L_finger1_joint.pos",
+    "L_finger2_joint.pos",
+    "R_finger1_joint.pos",
+    "R_finger2_joint.pos",
+    "left_gripper",
+    "right_gripper",
+)
+
+
+def _obs_value_to_flat_tensor(value: Any) -> torch.Tensor:
+    if isinstance(value, torch.Tensor):
+        return value.detach().float().flatten()
+    return torch.tensor(value, dtype=torch.float32).flatten()
+
+
 def flatten_obs(obs: dict) -> dict:
     """将 WalkerS2sim 扁平观测转为 LeRobot 标准 key 格式。
 
     observation.state 仅取关节位置 + 夹爪（14arm + 4finger + 2gripper = 20D），
     不包含 env_state（物体位姿），因为模型训练时未使用这些特征。
     """
-    state_keys = []
     image_keys = []
     for key in obs:
         if key.startswith("observation.images.") or key in ("head_left", "head_right", "wrist_left", "wrist_right"):
             image_keys.append(key)
-        elif key.endswith(".pos") or key in ("left_gripper", "right_gripper"):
-            state_keys.append(key)
 
     result = {}
-    if state_keys:
-        parts = [obs[k].flatten() if isinstance(obs[k], torch.Tensor) else torch.tensor(obs[k], dtype=torch.float32).flatten() for k in sorted(state_keys)]
-        result["observation.state"] = torch.cat(parts)
+    missing_state_keys = [key for key in WALKER_S2_STATE_ORDER if key not in obs]
+    if missing_state_keys:
+        raise KeyError(
+            "WalkerS2 observation 缺少训练状态字段: "
+            + ", ".join(missing_state_keys)
+        )
+    result["observation.state"] = torch.cat(
+        [_obs_value_to_flat_tensor(obs[key]) for key in WALKER_S2_STATE_ORDER]
+    )
 
     cam_map = {"head_left": "observation.images.head_left", "head_right": "observation.images.head_right",
                "wrist_left": "observation.images.wrist_left", "wrist_right": "observation.images.wrist_right"}
